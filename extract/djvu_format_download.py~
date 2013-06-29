@@ -14,8 +14,11 @@
  
 # Multiple downloaders can be run at the same time using the startnum and endnum
 # parameters, which will help to speed up the download process.
+
+# Script updated by Luis Aguilar to support file transformations during the download process
  
 import csv
+import glob
 import os
 import codecs
 import commands
@@ -23,13 +26,23 @@ import sys
 import StringIO
 import requests
 from lxml import etree
- 
+
+#download biodiveristy.csv with
+#wget 'http://www.archive.org/advancedsearch.php?q=collection%3A%28biodiversity%29+AND+format%3A%28djvu+xml%29&fl%5B%5D=identifier&rows=1000000&fmt=csv&xmlsearch=Search'
+
+# load global file object
+csvfile_list = glob.glob('load/*.csv')
+reader = csv.reader(open(csvfile_list[0], "rb"))
+
+# load global file transformer
+xslt_path = "config/DjVuToCRML.xsl"
+djvuToOcr_xsl = open(xslt_path, "r")
+
+# METHOD that uses global xslt to transform djvu xml to ocrml format
 def convertDjvuToOcrXML(djvu, path, id):
-    # need to refactor this as a class so that xsl is not reloaded for every transformation
-    xslt_path = "config/DjVuToCRML.xsl"
-    djvuToOcr_xsl = open(xslt_path, "r")
     djvu_path = "%s/%s_djvu.xml"%(path, id)
     djvu_file = codecs.open(djvu_path, "w", 'utf-8')
+    #djvu_file = open(djvu_path, "w")
     ocrml_path = "%s/%s_ocrml.xml"%(path, id)
     ocrml_file = codecs.open(ocrml_path, "w", 'utf-8')
     try:
@@ -38,7 +51,8 @@ def convertDjvuToOcrXML(djvu, path, id):
         transform = etree.XSLT(xslt_xml)
         djvu_xml = etree.XML(djvu)
         # file should already be XML unicode
-        djvu_file.write(etree.tostring(djvu_xml))
+        djvu_file.write(etree.tostring(djvu_xml, pretty_print=False, encoding=unicode))
+        #djvu_file.write(etree.tostring(djvu_xml, pretty_print=False))
 
         #print str(transform(djvu_xml))
         #djvu_xml = etree.parse(StringIO.StringIO(djvu))
@@ -50,20 +64,19 @@ def convertDjvuToOcrXML(djvu, path, id):
         djvu_file.close()
         ocrml_file.close()
     
-csvfile = "biodiv.csv"
-#download biodiveristy.csv with
-#wget 'http://www.archive.org/advancedsearch.php?q=collection%3A%28biodiversity%29+AND+format%3A%28djvu+xml%29&fl%5B%5D=identifier&rows=1000000&fmt=csv&xmlsearch=Search'
- 
+#MAIN
 startnum = 0
 #endnum   = 999999
 endnum = 2
- 
-reader = csv.reader(open(csvfile, "rb"))
-reader.next() #the first row is a header
- 
+
+# the first row is a header
+reader.next()
+
+# if you start at somewhere other than the beginning of the csv file, 
+#move forward to that startnum 
 for i in range(startnum):
     reader.next()
- 
+
 filenum = startnum
  
 for row in reader:
