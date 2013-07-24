@@ -11,6 +11,7 @@ __email__ = "luis@berkeley.edu"
 from optparse import OptionParser
 import csv
 import glob
+import pdb
 import os
 import codecs
 import commands
@@ -19,101 +20,58 @@ import StringIO
 import requests
 from lxml import etree
 
-# load global file transformer
-xslt_path = "config/DjVuToCRML.xsl"
-djvuToOcr_xsl = open(xslt_path, "r")
+# initializing global transformer, surround around try/catch or accept as parameter?
+transform = etree.XSLT(etree.parse('config/DjVuToCRML.xsl'))
 
+def processDirectory(dir_path):
+    """ Process the input directory
 
-# METHOD that uses global xslt to transform djvu xml to ocrml format
-def convertDjvuToOcrXML(djvu, path, id):
-    djvu_path = "%s/%s_djvu.xml"%(path, id)
-    djvu_file = codecs.open(djvu_path, "w", 'utf-8')
-    #djvu_file = open(djvu_path, "w")
-    ocrml_path = "%s/%s_ocrml.xml"%(path, id)
-    ocrml_file = codecs.open(ocrml_path, "w", 'utf-8')
+	    Process only djvu files that have not been transformed from
+	    directory path parameter.
+    """
+    # extract absolute path from user submitted path value, should put try/catch
+    abs_path = os.path.abspath(dir_path)
+    # loop through and open/transform djvu files
+    for filename in os.listdir(abs_path):
+        # establish file path for ocrml file
+        ocrml_path = abs_path + '/' + filename.replace('djvu', 'ocrml')
+        # only process and create ocrml file if it doesn't already exist
+        if filename.endswith("djvu.xml") and not os.path.isfile(ocrml_path):
+            _transformDjvu(abs_path, filename, ocrml_path)
+
+def _transformDjvu(abs_path, filename, ocrml_path):
+    global transform
+    djvu_path = abs_path + '/' + filename
     try:
-        #xslt_xml = etree.XML(djvuToOcr_xsl.read())
-        xslt_xml = etree.parse(xslt_path)
-        transform = etree.XSLT(xslt_xml)
-        djvu_xml = etree.XML(djvu)
-        # file should already be XML unicode
-        djvu_file.write(etree.tostring(djvu_xml, pretty_print=False, encoding=unicode))
-        #djvu_file.write(etree.tostring(djvu_xml, pretty_print=False))
-
-        #print str(transform(djvu_xml))
-        #djvu_xml = etree.parse(StringIO.StringIO(djvu))
-        #djvu_xml = etree.tostring(djvu, encoding='UTF-8')
+        f_djvu = codecs.open(djvu_path, "r", 'utf-8')
+        f_ocrml = codecs.open(ocrml_path, "w", 'utf-8')
+        # check for proper utf character sets
+        djvu_xml = etree.XML(f_djvu.read())
         ocrml = transform(djvu_xml)
-        ocrml_file.write(unicode(ocrml))
+        f_ocrml.write(unicode(ocrml))
     finally:
-        djvuToOcr_xsl.close()
-        djvu_file.close()
-        ocrml_file.close()
+        # close the source djvu and destination ocrml files
+        f_djvu.close()
+        f_ocrml.close()
 
-def purgatory():
-    for row in reader:
-        id = row[0]
-        dirnum = "%09d" % filenum
-        
-        print "downloading file #%s, id=%s" % (dirnum, id)
-     
-        #place 1000 items per directory
-        assert filenum<1000000
-        parentdir = dirnum[0:3]
-        subdir    = dirnum[3:6]
-        path = '%s/%s' % (parentdir, subdir)
-     
-        if not os.path.exists(path):
-            os.makedirs(path)
+def _getInput():
+    """ Command Line Input Parsing
 
-        url = "http://www.archive.org/download/%s/%s_djvu.xml" % (id, id)
-        dlpath = "%s/%s_djvu.xml"%(path, id)
-     
-        if not os.path.exists(dlpath):
-            #urllib.urlretrieve(url, dlpath)
-            #use rate limiting to be nicer to the cluster
-            #(status, output) = commands.getstatusoutput("""wget '%s' -O '%s' --limit-rate=250k --user-agent='IA Bulk Download Script' -q""" % (url, dlpath))
-            #assert 0 == status
-            
-            # new code to download file and hold it for transform
-            r = requests.get(url)
-            assert r.status_code == 200
-                    
-            #if downloaded so i'll need a code here to call convert function, get it and transform it
-            convertDjvuToOcrXML(djvu=r.content, path=path, id=id);
-        else:
-            print "\talready downloaded, skipping..."
-     
-        filenum+=1
-        if (filenum > endnum):
-            sys.exit()
+	    Parse the user input
+    """
+    parser = OptionParser()
+    parser.add_option('-i', '--input', dest='filepath', default='.')
+    (option, args) = parser.parse_args()
 
-def getInput():
-	""" Command Line Input Parsing
+    if not option.filepath:
+	    return parser.error('Djvu file path not given, use --input="path.to.djvu.file.for.download"')
 
-		Parse the user input
-	"""
-	parser = OptionParser()
-	parser.add_option('-i', '--input', dest='filepath', default='.')
-	(option, args) = parser.parse_args()
-
-	if not option.filepath:
-		return parser.error('Djvu file path not given, use --input="path.to.djvu.file.for.download"')
-
-	return {'src': option.filepath}
-
-def processDnldList(path):
-    ocrml_file = codecs.open(ocrml_path, "w", 'utf-8')
-    
-    for i in os.listdir(path):
-        if i.endswith("djvu.xml"): 
-            print i
+    return {'src': option.filepath}
 
 def main():
-	userInput = getInput()
-	processDnldList(userInput['src'])
-	#initDnld(dnldList, userInput['utility'])
-
+    userInput = _getInput()
+    processDirectory(userInput['src'])
+    # close the transform global?
 
 if __name__ == '__main__':
 	main()
